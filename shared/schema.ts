@@ -146,3 +146,27 @@ export const insertWhaleTradeSchema = createInsertSchema(whaleTrades).omit({
 
 export type InsertWhaleTrade = z.infer<typeof insertWhaleTradeSchema>;
 export type WhaleTrade = typeof whaleTrades.$inferSelect;
+
+export const agentExecutions = pgTable("agent_executions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentId: text("agent_id").notNull(),
+  taskType: text("task_type").notNull(),
+  status: text("status").notNull().default("pending"),
+  inputData: text("input_data"),
+  outputData: text("output_data"),
+  x402Signature: text("x402_signature"),
+  paymentType: text("payment_type"),
+  paymentAmount: real("payment_amount"),
+  executionTimeMs: integer("execution_time_ms"),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertAgentExecutionSchema = createInsertSchema(agentExecutions).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
+});
+
+export type InsertAgentExecution = z.infer<typeof insertAgentExecutionSchema>;
+export type AgentExecution = typeof agentExecutions.$inferSelect;
