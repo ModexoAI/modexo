@@ -147,6 +147,13 @@ export const insertWhaleTradeSchema = createInsertSchema(whaleTrades).omit({
 export type InsertWhaleTrade = z.infer<typeof insertWhaleTradeSchema>;
 export type WhaleTrade = typeof whaleTrades.$inferSelect;
 
+export const AGENT_EXECUTION_STATUS = {
+  PENDING: "pending",
+  RUNNING: "running",
+  COMPLETED: "completed",
+  FAILED: "failed",
+} as const;
+
 export const agentExecutions = pgTable("agent_executions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   agentId: text("agent_id").notNull(),
