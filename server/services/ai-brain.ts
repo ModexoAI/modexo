@@ -1,6 +1,9 @@
 import type { AIEngineConfig, AnalysisResult, Signal, DataSource } from "@shared/ai-engine";
 import { aggregateSignals, calculateConfidence, DEFAULT_DATA_SOURCES } from "@shared/ai-engine";
 
+const AI_BRAIN_VERSION = "1.0.0";
+const MAX_SIGNAL_AGE_MS = 300000;
+
 export class AIBrainService {
   private config: AIEngineConfig;
   private signals: Signal[] = [];
