@@ -1,4 +1,5 @@
-export const MODEXO_VERSION = "0.2.0";
+export const MODEXO_VERSION = "0.2.1";
+export const BUILD_DATE = "2024-12";
 
 export const AGENT_IDS = {
   FAAP_X402: "faap-x402",
