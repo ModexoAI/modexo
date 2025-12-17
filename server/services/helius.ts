@@ -1,3 +1,6 @@
+const HELIUS_SERVICE_VERSION = "1.0.0";
+const HELIUS_API_BASE = "https://api.helius.xyz";
+
 interface HeliusTransaction {
   signature: string;
   timestamp: number;
