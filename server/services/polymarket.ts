@@ -1,4 +1,6 @@
+const POLYMARKET_SERVICE_VERSION = "1.0.0";
 const GAMMA_API = "https://gamma-api.polymarket.com";
+const MIN_MARKET_VOLUME = 10000;
 
 interface TopTraderPosition {
   wallet: string;
