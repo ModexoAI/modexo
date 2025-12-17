@@ -1,3 +1,6 @@
+const DEXSCREENER_SERVICE_VERSION = "1.0.0";
+const DEXSCREENER_API_BASE = "https://api.dexscreener.com";
+
 interface DexPair {
   chainId: string;
   dexId: string;
