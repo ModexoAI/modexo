@@ -1,8 +1,38 @@
 import type { AIEngineConfig, AnalysisResult, Signal, DataSource } from "@shared/ai-engine";
 import { aggregateSignals, calculateConfidence, DEFAULT_DATA_SOURCES } from "@shared/ai-engine";
 
-const AI_BRAIN_VERSION = "1.0.0";
+const AI_BRAIN_VERSION = "1.1.0";
 const MAX_SIGNAL_AGE_MS = 300000;
+const SIGNAL_DECAY_RATE = 0.15;
+const MIN_SIGNALS_FOR_ANALYSIS = 2;
+
+function calculateSignalDecay(signalAge: number): number {
+  const ageMinutes = signalAge / 60000;
+  return Math.max(0, 1 - (SIGNAL_DECAY_RATE * ageMinutes));
+}
+
+function filterStaleSignals(signals: Signal[], maxAge: number): Signal[] {
+  const now = Date.now();
+  return signals.filter(s => (now - s.timestamp) < maxAge);
+}
+
+function normalizeSignalStrength(strength: number): number {
+  return Math.max(0, Math.min(1, strength));
+}
+
+function weightedSignalAverage(signals: Signal[], weights: Map<string, number>): number {
+  if (signals.length === 0) return 0;
+  let totalWeight = 0;
+  let weightedSum = 0;
+  
+  for (const signal of signals) {
+    const weight = weights.get(signal.source) || 1;
+    weightedSum += signal.strength * weight;
+    totalWeight += weight;
+  }
+  
+  return totalWeight > 0 ? weightedSum / totalWeight : 0;
+}
 
 export class AIBrainService {
   private config: AIEngineConfig;
