@@ -49,3 +49,62 @@ export function calculateConfidence(
   const baseConfidence = signalCount > 3 ? 0.7 : 0.5;
   return Math.min(1, baseConfidence * agreementRatio * dataQuality);
 }
+
+export function filterSignalsByType(
+  signals: Signal[],
+  types: DataSource["type"][]
+): Signal[] {
+  const typeSet = new Set(types);
+  return signals.filter(s => typeSet.has(s.type as DataSource["type"]));
+}
+
+export function groupSignalsBySource(
+  signals: Signal[]
+): Map<string, Signal[]> {
+  const grouped = new Map<string, Signal[]>();
+  
+  for (const signal of signals) {
+    const existing = grouped.get(signal.source) || [];
+    existing.push(signal);
+    grouped.set(signal.source, existing);
+  }
+  
+  return grouped;
+}
+
+export function getStrongestSignal(signals: Signal[]): Signal | null {
+  if (signals.length === 0) return null;
+  return signals.reduce((strongest, current) => 
+    current.strength > strongest.strength ? current : strongest
+  );
+}
+
+export function calculateSignalConsensus(signals: Signal[]): number {
+  if (signals.length < 2) return 1;
+  
+  const strengths = signals.map(s => s.strength);
+  const mean = strengths.reduce((a, b) => a + b, 0) / strengths.length;
+  const variance = strengths.reduce((sum, s) => sum + Math.pow(s - mean, 2), 0) / strengths.length;
+  const stdDev = Math.sqrt(variance);
+  
+  return Math.max(0, 1 - (stdDev / 0.5));
+}
+
+export function mergeDataSources(
+  primary: DataSource[],
+  secondary: DataSource[]
+): DataSource[] {
+  const merged = new Map<string, DataSource>();
+  
+  for (const source of primary) {
+    merged.set(source.id, source);
+  }
+  
+  for (const source of secondary) {
+    if (!merged.has(source.id)) {
+      merged.set(source.id, source);
+    }
+  }
+  
+  return Array.from(merged.values());
+}
