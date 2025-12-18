@@ -42,3 +42,48 @@ export function calculateAgentFee(
 export function validateX402Signature(signature: string): boolean {
   return signature.length === 88 && /^[A-Za-z0-9+/=]+$/.test(signature);
 }
+
+export function validateSolanaAddress(address: string): boolean {
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
+}
+
+export function validatePaymentRequest(
+  amount: number,
+  config: X402PaymentConfig
+): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  
+  if (!Number.isFinite(amount) || amount <= 0) {
+    errors.push("Invalid payment amount");
+  }
+  
+  if (amount < config.minPayment) {
+    errors.push(`Amount below minimum: ${config.minPayment}`);
+  }
+  
+  if (amount > config.maxPayment) {
+    errors.push(`Amount exceeds maximum: ${config.maxPayment}`);
+  }
+  
+  if (!validateSolanaAddress(config.tokenMint)) {
+    errors.push("Invalid token mint address");
+  }
+  
+  return { valid: errors.length === 0, errors };
+}
+
+export function formatPaymentAmount(amount: number, decimals: number = 9): string {
+  return (amount / Math.pow(10, decimals)).toFixed(decimals);
+}
+
+export function parsePaymentAmount(formatted: string, decimals: number = 9): number {
+  return Math.round(parseFloat(formatted) * Math.pow(10, decimals));
+}
+
+export function estimateTransactionFee(
+  priorityLevel: "low" | "normal" | "high"
+): number {
+  const baseFee = 5000;
+  const multipliers = { low: 1, normal: 2, high: 5 };
+  return baseFee * multipliers[priorityLevel];
+}
