@@ -8,7 +8,66 @@ import {
   whaleTrades, type WhaleTrade, type InsertWhaleTrade
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, gte, sql } from "drizzle-orm";
+import { eq, desc, gte, sql, and, lt } from "drizzle-orm";
+
+const STORAGE_VERSION = "1.1.0";
+
+interface QueryMetrics {
+  totalQueries: number;
+  successfulQueries: number;
+  failedQueries: number;
+  averageLatencyMs: number;
+}
+
+const queryMetrics: QueryMetrics = {
+  totalQueries: 0,
+  successfulQueries: 0,
+  failedQueries: 0,
+  averageLatencyMs: 0,
+};
+
+function trackQuery(success: boolean, latencyMs: number): void {
+  queryMetrics.totalQueries++;
+  if (success) {
+    queryMetrics.successfulQueries++;
+  } else {
+    queryMetrics.failedQueries++;
+  }
+  queryMetrics.averageLatencyMs = 
+    (queryMetrics.averageLatencyMs * (queryMetrics.totalQueries - 1) + latencyMs) / 
+    queryMetrics.totalQueries;
+}
+
+export function getQueryMetrics(): QueryMetrics {
+  return { ...queryMetrics };
+}
+
+export function resetQueryMetrics(): void {
+  queryMetrics.totalQueries = 0;
+  queryMetrics.successfulQueries = 0;
+  queryMetrics.failedQueries = 0;
+  queryMetrics.averageLatencyMs = 0;
+}
+
+async function withMetrics<T>(operation: () => Promise<T>): Promise<T> {
+  const start = Date.now();
+  try {
+    const result = await operation();
+    trackQuery(true, Date.now() - start);
+    return result;
+  } catch (error) {
+    trackQuery(false, Date.now() - start);
+    throw error;
+  }
+}
+
+function validateAddress(address: string): boolean {
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
+}
+
+function sanitizeInput(input: string): string {
+  return input.trim().slice(0, 500);
+}
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
