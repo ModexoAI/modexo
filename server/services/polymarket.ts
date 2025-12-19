@@ -1,6 +1,63 @@
-const POLYMARKET_SERVICE_VERSION = "1.0.0";
+const POLYMARKET_SERVICE_VERSION = "1.1.0";
 const GAMMA_API = "https://gamma-api.polymarket.com";
 const MIN_MARKET_VOLUME = 10000;
+const CONFIDENCE_THRESHOLD = 0.65;
+const MAX_MARKETS_TO_ANALYZE = 50;
+
+interface MarketAnalysis {
+  marketId: string;
+  question: string;
+  confidence: number;
+  predictedOutcome: string;
+  expectedValue: number;
+}
+
+interface OddsCalculation {
+  impliedProbability: number;
+  fairValue: number;
+  edge: number;
+}
+
+function calculateImpliedProbability(price: number): number {
+  return Math.max(0, Math.min(1, price));
+}
+
+function calculateExpectedValue(
+  probability: number,
+  potentialReturn: number,
+  stake: number
+): number {
+  const winAmount = stake * potentialReturn;
+  const lossAmount = stake;
+  return (probability * winAmount) - ((1 - probability) * lossAmount);
+}
+
+function calculateKellyBet(
+  probability: number,
+  odds: number,
+  bankroll: number,
+  fraction: number = 0.25
+): number {
+  const q = 1 - probability;
+  const kelly = (probability * odds - q) / odds;
+  const adjustedKelly = Math.max(0, kelly * fraction);
+  return Math.round(bankroll * adjustedKelly);
+}
+
+function assessMarketEfficiency(
+  yesPrice: number,
+  noPrice: number
+): { efficient: boolean; spread: number } {
+  const totalPrice = yesPrice + noPrice;
+  const spread = Math.abs(totalPrice - 1);
+  return { efficient: spread < 0.05, spread };
+}
+
+function rankMarketsByEdge(markets: MarketAnalysis[]): MarketAnalysis[] {
+  return markets
+    .filter(m => m.confidence >= CONFIDENCE_THRESHOLD)
+    .sort((a, b) => b.expectedValue - a.expectedValue);
+}
 
 interface TopTraderPosition {
   wallet: string;
