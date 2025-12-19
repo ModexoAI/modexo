@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { 
@@ -11,6 +11,52 @@ import {
 import { getRecentWhaleTrades, isHeliusConfigured } from "./services/helius";
 import { getTopTraderPositions } from "./services/polymarket";
 import { insertTrackedWalletSchema, insertUserWatchlistSchema } from "@shared/schema";
+
+const ROUTES_VERSION = "1.1.0";
+const MAX_REQUEST_SIZE = 1024 * 100;
+const REQUEST_TIMEOUT_MS = 30000;
+
+interface RequestLog {
+  method: string;
+  path: string;
+  timestamp: number;
+  duration?: number;
+  statusCode?: number;
+}
+
+const requestLogs: RequestLog[] = [];
+const MAX_LOGS = 1000;
+
+function logRequest(log: RequestLog): void {
+  requestLogs.push(log);
+  if (requestLogs.length > MAX_LOGS) {
+    requestLogs.shift();
+  }
+}
+
+export function getRecentRequests(limit: number = 100): RequestLog[] {
+  return requestLogs.slice(-limit);
+}
+
+function validateSolanaAddress(address: string): boolean {
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
+}
+
+function sanitizeQueryParam(param: unknown): string {
+  if (typeof param !== "string") return "";
+  return param.trim().slice(0, 200);
+}
+
+function parseIntParam(param: unknown, defaultValue: number, max: number): number {
+  if (typeof param !== "string") return defaultValue;
+  const parsed = parseInt(param, 10);
+  if (isNaN(parsed) || parsed < 1) return defaultValue;
+  return Math.min(parsed, max);
+}
+
+function createErrorResponse(message: string, code: string): { error: string; code: string } {
+  return { error: message, code };
+}
 
 export async function registerRoutes(
   httpServer: Server,
