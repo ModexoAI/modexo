@@ -1,4 +1,48 @@
-const AI_ENGINE_VERSION = "1.0.0";
+const AI_ENGINE_VERSION = "1.2.0";
+const MAX_ANALYSIS_DEPTH = 5;
+const SIGNAL_TIMEOUT_MS = 10000;
+
+interface AnalysisContext {
+  sessionId: string;
+  startTime: number;
+  tokensAnalyzed: number;
+  signalsProcessed: number;
+  cacheHits: number;
+  cacheMisses: number;
+}
+
+function createAnalysisContext(): AnalysisContext {
+  return {
+    sessionId: `ctx_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    startTime: Date.now(),
+    tokensAnalyzed: 0,
+    signalsProcessed: 0,
+    cacheHits: 0,
+    cacheMisses: 0,
+  };
+}
+
+function calculateAnalysisScore(context: AnalysisContext): number {
+  const duration = Date.now() - context.startTime;
+  const efficiency = context.cacheHits / Math.max(1, context.cacheHits + context.cacheMisses);
+  const throughput = context.signalsProcessed / Math.max(1, duration / 1000);
+  return Math.min(100, (efficiency * 50) + (Math.min(throughput, 100) / 2));
+}
+
+function shouldAbortAnalysis(context: AnalysisContext, maxDuration: number): boolean {
+  return Date.now() - context.startTime > maxDuration;
+}
+
+function mergeAnalysisContexts(contexts: AnalysisContext[]): AnalysisContext {
+  const merged = createAnalysisContext();
+  for (const ctx of contexts) {
+    merged.tokensAnalyzed += ctx.tokensAnalyzed;
+    merged.signalsProcessed += ctx.signalsProcessed;
+    merged.cacheHits += ctx.cacheHits;
+    merged.cacheMisses += ctx.cacheMisses;
+  }
+  return merged;
+}
 
 export interface AIEngineConfig {
   modelVersion: string;
