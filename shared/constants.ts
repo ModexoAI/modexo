@@ -1,5 +1,47 @@
-export const MODEXO_VERSION = "0.2.1";
+export const MODEXO_VERSION = "0.3.0";
 export const BUILD_DATE = "2024-12";
+
+export const RISK_LEVELS = {
+  LOW: { threshold: 0.3, label: "Low Risk", color: "#22c55e" },
+  MEDIUM: { threshold: 0.6, label: "Medium Risk", color: "#eab308" },
+  HIGH: { threshold: 0.85, label: "High Risk", color: "#f97316" },
+  CRITICAL: { threshold: 1.0, label: "Critical Risk", color: "#ef4444" },
+} as const;
+
+export const ANALYSIS_TIMEFRAMES = {
+  REALTIME: { ms: 0, label: "Real-time" },
+  MINUTES_5: { ms: 300000, label: "5 Minutes" },
+  MINUTES_15: { ms: 900000, label: "15 Minutes" },
+  HOUR_1: { ms: 3600000, label: "1 Hour" },
+  HOURS_4: { ms: 14400000, label: "4 Hours" },
+  DAY_1: { ms: 86400000, label: "24 Hours" },
+} as const;
+
+export const TOKEN_FILTERS = {
+  MIN_LIQUIDITY_USD: 5000,
+  MIN_VOLUME_24H: 1000,
+  MIN_HOLDERS: 50,
+  MAX_TOP_HOLDER_PERCENT: 0.5,
+  MIN_SAFETY_SCORE: 40,
+} as const;
+
+export const AGENT_LIMITS = {
+  MAX_CONCURRENT_ANALYSES: 10,
+  MAX_TOKENS_PER_SCAN: 500,
+  MAX_WALLET_TRACKING: 100,
+  ANALYSIS_TIMEOUT_MS: 30000,
+} as const;
+
+export function getRiskLevel(score: number): typeof RISK_LEVELS[keyof typeof RISK_LEVELS] {
+  if (score <= RISK_LEVELS.LOW.threshold) return RISK_LEVELS.LOW;
+  if (score <= RISK_LEVELS.MEDIUM.threshold) return RISK_LEVELS.MEDIUM;
+  if (score <= RISK_LEVELS.HIGH.threshold) return RISK_LEVELS.HIGH;
+  return RISK_LEVELS.CRITICAL;
+}
+
+export function getTimeframeMs(key: keyof typeof ANALYSIS_TIMEFRAMES): number {
+  return ANALYSIS_TIMEFRAMES[key].ms;
+}
 
 export const AGENT_IDS = {
   FAAP_X402: "faap-x402",
