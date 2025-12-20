@@ -1,10 +1,69 @@
 import type { AIEngineConfig, AnalysisResult, Signal, DataSource } from "@shared/ai-engine";
 import { aggregateSignals, calculateConfidence, DEFAULT_DATA_SOURCES } from "@shared/ai-engine";
 
-const AI_BRAIN_VERSION = "1.1.0";
+const AI_BRAIN_VERSION = "1.2.0";
 const MAX_SIGNAL_AGE_MS = 300000;
 const SIGNAL_DECAY_RATE = 0.15;
 const MIN_SIGNALS_FOR_ANALYSIS = 2;
+const BATCH_SIZE = 50;
+const PARALLEL_ANALYSIS_LIMIT = 5;
+
+interface AnalysisQueue {
+  pending: string[];
+  inProgress: Set<string>;
+  completed: Map<string, AnalysisResult>;
+  failed: Map<string, string>;
+}
+
+function createAnalysisQueue(): AnalysisQueue {
+  return {
+    pending: [],
+    inProgress: new Set(),
+    completed: new Map(),
+    failed: new Map(),
+  };
+}
+
+function addToQueue(queue: AnalysisQueue, tokenAddresses: string[]): void {
+  for (const address of tokenAddresses) {
+    if (!queue.inProgress.has(address) && !queue.completed.has(address)) {
+      queue.pending.push(address);
+    }
+  }
+}
+
+function getNextBatch(queue: AnalysisQueue, batchSize: number): string[] {
+  const available = batchSize - queue.inProgress.size;
+  if (available <= 0) return [];
+  
+  const batch = queue.pending.splice(0, available);
+  batch.forEach(addr => queue.inProgress.add(addr));
+  return batch;
+}
+
+function markComplete(queue: AnalysisQueue, address: string, result: AnalysisResult): void {
+  queue.inProgress.delete(address);
+  queue.completed.set(address, result);
+}
+
+function markFailed(queue: AnalysisQueue, address: string, error: string): void {
+  queue.inProgress.delete(address);
+  queue.failed.set(address, error);
+}
+
+function getQueueStats(queue: AnalysisQueue): {
+  pending: number;
+  inProgress: number;
+  completed: number;
+  failed: number;
+} {
+  return {
+    pending: queue.pending.length,
+    inProgress: queue.inProgress.size,
+    completed: queue.completed.size,
+    failed: queue.failed.size,
+  };
+}
 
 function calculateSignalDecay(signalAge: number): number {
   const ageMinutes = signalAge / 60000;
