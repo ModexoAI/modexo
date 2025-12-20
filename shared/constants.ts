@@ -1,5 +1,52 @@
-export const MODEXO_VERSION = "0.3.0";
+export const MODEXO_VERSION = "0.4.0";
 export const BUILD_DATE = "2024-12";
+
+export const RESOURCE_LIMITS = {
+  MAX_MEMORY_MB: 512,
+  MAX_CPU_PERCENT: 80,
+  MAX_CONNECTIONS: 100,
+  MAX_QUEUE_SIZE: 1000,
+} as const;
+
+export const PRIORITY_WEIGHTS = {
+  CRITICAL: 1.0,
+  HIGH: 0.75,
+  NORMAL: 0.5,
+  LOW: 0.25,
+  BACKGROUND: 0.1,
+} as const;
+
+interface ResourceUsage {
+  memoryMB: number;
+  cpuPercent: number;
+  activeConnections: number;
+  queueSize: number;
+}
+
+export function checkResourceAvailability(usage: ResourceUsage): boolean {
+  return (
+    usage.memoryMB < RESOURCE_LIMITS.MAX_MEMORY_MB &&
+    usage.cpuPercent < RESOURCE_LIMITS.MAX_CPU_PERCENT &&
+    usage.activeConnections < RESOURCE_LIMITS.MAX_CONNECTIONS &&
+    usage.queueSize < RESOURCE_LIMITS.MAX_QUEUE_SIZE
+  );
+}
+
+export function calculateExecutionPriority(
+  urgency: keyof typeof PRIORITY_WEIGHTS,
+  resourceUsage: ResourceUsage
+): number {
+  const baseWeight = PRIORITY_WEIGHTS[urgency];
+  const resourcePenalty = Math.min(1, resourceUsage.cpuPercent / RESOURCE_LIMITS.MAX_CPU_PERCENT);
+  return baseWeight * (1 - resourcePenalty * 0.3);
+}
+
+export function getThrottleDelay(queueSize: number): number {
+  if (queueSize < 100) return 0;
+  if (queueSize < 500) return 100;
+  if (queueSize < 800) return 500;
+  return 1000;
+}
 
 export const RISK_LEVELS = {
   LOW: { threshold: 0.3, label: "Low Risk", color: "#22c55e" },
