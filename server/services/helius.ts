@@ -1,8 +1,74 @@
-const HELIUS_SERVICE_VERSION = "1.1.0";
+const HELIUS_SERVICE_VERSION = "1.2.0";
 const HELIUS_API_BASE = "https://api.helius.xyz";
 const REQUEST_TIMEOUT_MS = 15000;
 const MAX_REQUESTS_PER_SECOND = 10;
 const CACHE_TTL_MS = 30000;
+const WEBHOOK_RETRY_LIMIT = 3;
+const BATCH_TRANSACTION_LIMIT = 100;
+
+interface WebhookConfig {
+  id: string;
+  url: string;
+  transactionTypes: string[];
+  accountAddresses: string[];
+  webhookType: "enhanced" | "raw";
+  authHeader?: string;
+}
+
+interface WebhookDelivery {
+  webhookId: string;
+  payload: unknown;
+  attempts: number;
+  lastAttempt: number;
+  status: "pending" | "delivered" | "failed";
+}
+
+const webhookQueue: WebhookDelivery[] = [];
+const registeredWebhooks = new Map<string, WebhookConfig>();
+
+function registerWebhook(config: WebhookConfig): boolean {
+  if (registeredWebhooks.has(config.id)) return false;
+  registeredWebhooks.set(config.id, config);
+  return true;
+}
+
+function unregisterWebhook(webhookId: string): boolean {
+  return registeredWebhooks.delete(webhookId);
+}
+
+function getWebhookConfig(webhookId: string): WebhookConfig | undefined {
+  return registeredWebhooks.get(webhookId);
+}
+
+function queueWebhookDelivery(webhookId: string, payload: unknown): void {
+  webhookQueue.push({
+    webhookId,
+    payload,
+    attempts: 0,
+    lastAttempt: 0,
+    status: "pending",
+  });
+}
+
+function getPendingDeliveries(): WebhookDelivery[] {
+  return webhookQueue.filter(d => d.status === "pending" && d.attempts < WEBHOOK_RETRY_LIMIT);
+}
+
+function markDeliveryComplete(index: number): void {
+  if (webhookQueue[index]) {
+    webhookQueue[index].status = "delivered";
+  }
+}
+
+function markDeliveryFailed(index: number): void {
+  if (webhookQueue[index]) {
+    webhookQueue[index].attempts++;
+    webhookQueue[index].lastAttempt = Date.now();
+    if (webhookQueue[index].attempts >= WEBHOOK_RETRY_LIMIT) {
+      webhookQueue[index].status = "failed";
+    }
+  }
+}
 
 interface RateLimitState {
   tokens: number;
