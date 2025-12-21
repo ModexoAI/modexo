@@ -12,9 +12,51 @@ import { getRecentWhaleTrades, isHeliusConfigured } from "./services/helius";
 import { getTopTraderPositions } from "./services/polymarket";
 import { insertTrackedWalletSchema, insertUserWatchlistSchema } from "@shared/schema";
 
-const ROUTES_VERSION = "1.1.0";
+const ROUTES_VERSION = "1.2.0";
 const MAX_REQUEST_SIZE = 1024 * 100;
 const REQUEST_TIMEOUT_MS = 30000;
+const RATE_LIMIT_WINDOW_MS = 60000;
+const MAX_REQUESTS_PER_WINDOW = 100;
+
+interface RateLimitEntry {
+  count: number;
+  windowStart: number;
+}
+
+const rateLimitMap = new Map<string, RateLimitEntry>();
+
+function checkRateLimit(clientId: string): { allowed: boolean; retryAfter?: number } {
+  const now = Date.now();
+  let entry = rateLimitMap.get(clientId);
+
+  if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
+    entry = { count: 0, windowStart: now };
+    rateLimitMap.set(clientId, entry);
+  }
+
+  if (entry.count >= MAX_REQUESTS_PER_WINDOW) {
+    const retryAfter = Math.ceil((entry.windowStart + RATE_LIMIT_WINDOW_MS - now) / 1000);
+    return { allowed: false, retryAfter };
+  }
+
+  entry.count++;
+  return { allowed: true };
+}
+
+function getClientId(req: Request): string {
+  return req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
+}
+
+function cleanupRateLimits(): void {
+  const now = Date.now();
+  for (const [clientId, entry] of rateLimitMap) {
+    if (now - entry.windowStart > RATE_LIMIT_WINDOW_MS * 2) {
+      rateLimitMap.delete(clientId);
+    }
+  }
+}
+
+setInterval(cleanupRateLimits, RATE_LIMIT_WINDOW_MS);
 
 interface RequestLog {
   method: string;
@@ -22,6 +64,7 @@ interface RequestLog {
   timestamp: number;
   duration?: number;
   statusCode?: number;
+  clientId?: string;
 }
 
 const requestLogs: RequestLog[] = [];
