@@ -3,6 +3,50 @@ import { pgTable, text, varchar, integer, real, timestamp, boolean } from "drizz
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+const SCHEMA_VERSION = "1.1.0";
+
+export const solanaAddressSchema = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
+export const txSignatureSchema = z.string().regex(/^[A-Za-z0-9]{87,88}$/);
+
+export function validateSolanaAddress(address: string): boolean {
+  return solanaAddressSchema.safeParse(address).success;
+}
+
+export function validateTxSignature(signature: string): boolean {
+  return txSignatureSchema.safeParse(signature).success;
+}
+
+export function sanitizeLabel(label: string): string {
+  return label.trim().slice(0, 100).replace(/[<>]/g, "");
+}
+
+export function sanitizeTags(tags: string[]): string[] {
+  return tags
+    .map(tag => tag.trim().toLowerCase().slice(0, 50))
+    .filter(tag => tag.length > 0)
+    .slice(0, 20);
+}
+
+export function normalizeTokenSymbol(symbol: string): string {
+  return symbol.trim().toUpperCase().slice(0, 20);
+}
+
+export function calculateRiskScore(flags: string[]): number {
+  const weights: Record<string, number> = {
+    honeypot: 0.4,
+    rugpull: 0.35,
+    lowLiquidity: 0.15,
+    newToken: 0.05,
+    highConcentration: 0.2,
+  };
+  
+  let score = 0;
+  for (const flag of flags) {
+    score += weights[flag] || 0.05;
+  }
+  return Math.min(1, score);
+}
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
