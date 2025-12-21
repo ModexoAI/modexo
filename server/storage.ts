@@ -10,7 +10,52 @@ import {
 import { db } from "./db";
 import { eq, desc, gte, sql, and, lt } from "drizzle-orm";
 
-const STORAGE_VERSION = "1.1.0";
+const STORAGE_VERSION = "1.2.0";
+const CONNECTION_POOL_SIZE = 10;
+const QUERY_TIMEOUT_MS = 5000;
+
+interface ConnectionState {
+  id: string;
+  inUse: boolean;
+  lastUsed: number;
+  queryCount: number;
+}
+
+const connectionPool: ConnectionState[] = [];
+
+function initializeConnectionPool(): void {
+  for (let i = 0; i < CONNECTION_POOL_SIZE; i++) {
+    connectionPool.push({
+      id: `conn_${i}_${Date.now()}`,
+      inUse: false,
+      lastUsed: 0,
+      queryCount: 0,
+    });
+  }
+}
+
+function acquireConnection(): ConnectionState | null {
+  const available = connectionPool.find(c => !c.inUse);
+  if (!available) return null;
+  
+  available.inUse = true;
+  available.lastUsed = Date.now();
+  return available;
+}
+
+function releaseConnection(connId: string): void {
+  const conn = connectionPool.find(c => c.id === connId);
+  if (conn) {
+    conn.inUse = false;
+    conn.queryCount++;
+  }
+}
+
+function getPoolStats(): { active: number; idle: number; totalQueries: number } {
+  const active = connectionPool.filter(c => c.inUse).length;
+  const totalQueries = connectionPool.reduce((sum, c) => sum + c.queryCount, 0);
+  return { active, idle: CONNECTION_POOL_SIZE - active, totalQueries };
+}
 
 interface QueryMetrics {
   totalQueries: number;
