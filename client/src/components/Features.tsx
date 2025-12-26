@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Zap, Activity, Radio, Cpu } from "lucide-react";
+import { Zap, Activity, Radio, Wallet } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
@@ -14,8 +14,8 @@ const agents = [
     capabilities: ['100x Speed', 'Rug Detection', 'Alpha Discovery', 'Real-Time Ranking']
   },
   {
-    id: 'x402-polymarket',
-    name: "x402 Bet Prediction Agent",
+    id: 'x402-ModexoBet',
+    name: "x402-ModexoBet Agent",
     description: "MODEXO Analytic Engine calculates probabilities and simulates possible outcomes across prediction markets. Advanced algorithms analyze market data to identify high-conviction opportunities.",
     icon: Activity,
     status: 'online',
@@ -33,9 +33,9 @@ const agents = [
     id: 'x402-portfolio',
     name: "x402 Portfolio Agent",
     description: "Deep analysis of your wallet holdings with PnL tracking, risk assessment, and optimization suggestions. Let AI manage your portfolio strategy.",
-    icon: Cpu,
-    status: 'coming_soon',
-    capabilities: ['PnL Tracking', 'Risk Score', 'Diversification']
+    icon: Wallet,
+    status: 'online',
+    capabilities: ['PnL Tracking', 'Risk Score', 'Diversification', 'Allocation Charts']
   }
 ];
 
