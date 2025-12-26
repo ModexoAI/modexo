@@ -209,7 +209,7 @@ function setCache<T>(key: string, data: T): void {
   cache.set(key, { data, timestamp: Date.now() });
 }
 
-const MIN_TRADE_SIZE_USD = 1000;
+const MIN_TRADE_SIZE_USD = 10;
 
 function getHeliusApiKey(): string | undefined {
   return process.env.HELIUS_API_KEY;
