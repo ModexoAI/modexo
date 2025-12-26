@@ -5,7 +5,8 @@ import {
   tokenSnapshots, type TokenSnapshot, type InsertTokenSnapshot,
   insiderRelations, type InsiderRelation, type InsertInsiderRelation,
   userWatchlist, type UserWatchlist, type InsertUserWatchlist,
-  whaleTrades, type WhaleTrade, type InsertWhaleTrade
+  whaleTrades, type WhaleTrade, type InsertWhaleTrade,
+  portfolioSnapshots, type PortfolioSnapshot, type InsertPortfolioSnapshot
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, gte, sql, and, lt } from "drizzle-orm";
@@ -141,6 +142,9 @@ export interface IStorage {
   
   getWhaleTrades(limit?: number): Promise<WhaleTrade[]>;
   createWhaleTrade(trade: InsertWhaleTrade): Promise<WhaleTrade>;
+  
+  getPortfolioSnapshots(walletAddress: string, limit?: number): Promise<PortfolioSnapshot[]>;
+  createPortfolioSnapshot(snapshot: InsertPortfolioSnapshot): Promise<PortfolioSnapshot>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -253,6 +257,18 @@ export class DatabaseStorage implements IStorage {
 
   async createWhaleTrade(trade: InsertWhaleTrade): Promise<WhaleTrade> {
     const [created] = await db.insert(whaleTrades).values(trade).returning();
+    return created;
+  }
+
+  async getPortfolioSnapshots(walletAddress: string, limit = 30): Promise<PortfolioSnapshot[]> {
+    return db.select().from(portfolioSnapshots)
+      .where(eq(portfolioSnapshots.walletAddress, walletAddress))
+      .orderBy(desc(portfolioSnapshots.createdAt))
+      .limit(limit);
+  }
+
+  async createPortfolioSnapshot(snapshot: InsertPortfolioSnapshot): Promise<PortfolioSnapshot> {
+    const [created] = await db.insert(portfolioSnapshots).values(snapshot).returning();
     return created;
   }
 }
