@@ -6,7 +6,9 @@ import {
   searchPairs, 
   getTrendingSolana, 
   calculateSafetyScore,
-  pairToTokenSnapshot 
+  pairToTokenSnapshot,
+  analyzeSmartEntry,
+  analyzeLiquidity 
 } from "./services/dexscreener";
 import { getRecentWhaleTrades, isHeliusConfigured, getWalletRecentSwaps } from "./services/helius";
 import { getTopTraderPositions, getCurrentMode, setMode, getPredictionEntries, type PredictionMode } from "./services/polymarket";
@@ -661,6 +663,54 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error auditing contract:", error);
       res.status(500).json({ error: "Failed to audit contract" });
+    }
+  });
+
+  app.post("/api/smart-entry/analyze", async (req, res) => {
+    try {
+      const { tokenAddress } = req.body;
+      if (!tokenAddress || typeof tokenAddress !== 'string') {
+        return res.status(400).json({ error: "Token address is required" });
+      }
+
+      const cleanAddress = tokenAddress.trim();
+      if (!validateSolanaAddress(cleanAddress)) {
+        return res.status(400).json({ error: "Invalid Solana token address format" });
+      }
+
+      const analysis = await analyzeSmartEntry(cleanAddress);
+      if (!analysis) {
+        return res.status(404).json({ error: "Token not found or no trading data available" });
+      }
+
+      res.json(analysis);
+    } catch (error) {
+      console.error("Error analyzing smart entry:", error);
+      res.status(500).json({ error: "Failed to analyze entry points" });
+    }
+  });
+
+  app.post("/api/liquidity/analyze", async (req, res) => {
+    try {
+      const { tokenAddress } = req.body;
+      if (!tokenAddress || typeof tokenAddress !== 'string') {
+        return res.status(400).json({ error: "Token address is required" });
+      }
+
+      const cleanAddress = tokenAddress.trim();
+      if (!validateSolanaAddress(cleanAddress)) {
+        return res.status(400).json({ error: "Invalid Solana token address format" });
+      }
+
+      const analysis = await analyzeLiquidity(cleanAddress);
+      if (!analysis) {
+        return res.status(404).json({ error: "Token not found or no trading data available" });
+      }
+
+      res.json(analysis);
+    } catch (error) {
+      console.error("Error analyzing liquidity:", error);
+      res.status(500).json({ error: "Failed to analyze liquidity" });
     }
   });
 
