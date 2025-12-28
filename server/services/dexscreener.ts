@@ -409,3 +409,150 @@ export function pairToTokenSnapshot(pair: DexPair) {
     imageUrl: pair.info?.imageUrl ?? null,
   };
 }
+
+export interface LiquidityAnalysis {
+  tokenAddress: string;
+  symbol: string;
+  name: string;
+  imageUrl: string | null;
+  currentPrice: number;
+  liquidity: {
+    totalUsd: number;
+    baseAmount: number;
+    quoteAmount: number;
+    depth: 'deep' | 'moderate' | 'shallow' | 'critical';
+  };
+  concentration: {
+    riskLevel: 'low' | 'medium' | 'high' | 'extreme';
+    topPoolShare: number;
+    poolCount: number;
+  };
+  slippage: {
+    estimated1k: number;
+    estimated10k: number;
+    estimated50k: number;
+  };
+  metrics: {
+    liquidityToMcap: number;
+    volumeToLiquidity: number;
+    healthScore: number;
+  };
+  dexDistribution: Array<{
+    name: string;
+    liquidity: number;
+    share: number;
+  }>;
+  warnings: string[];
+  recommendation: 'safe' | 'moderate' | 'caution' | 'avoid';
+}
+
+export async function analyzeLiquidity(tokenAddress: string): Promise<LiquidityAnalysis | null> {
+  const pairs = await getTokenPairs(tokenAddress);
+  if (!pairs.length) return null;
+
+  const sortedPairs = [...pairs].sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
+  const mainPair = sortedPairs[0];
+  
+  const currentPrice = parseFloat(mainPair.priceUsd) || 0;
+  if (currentPrice === 0) return null;
+
+  const totalLiquidity = sortedPairs.reduce((sum, p) => sum + (p.liquidity?.usd ?? 0), 0);
+  const baseLiquidity = mainPair.liquidity?.base ?? 0;
+  const quoteLiquidity = mainPair.liquidity?.quote ?? 0;
+  const marketCap = mainPair.marketCap ?? mainPair.fdv ?? 0;
+  const volume24h = mainPair.volume?.h24 ?? 0;
+
+  let depth: 'deep' | 'moderate' | 'shallow' | 'critical';
+  if (totalLiquidity >= 500000) depth = 'deep';
+  else if (totalLiquidity >= 100000) depth = 'moderate';
+  else if (totalLiquidity >= 20000) depth = 'shallow';
+  else depth = 'critical';
+
+  const topPoolShare = mainPair.liquidity?.usd ? (mainPair.liquidity.usd / totalLiquidity) * 100 : 100;
+  let concentrationRisk: 'low' | 'medium' | 'high' | 'extreme';
+  if (topPoolShare < 50 && sortedPairs.length >= 3) concentrationRisk = 'low';
+  else if (topPoolShare < 70 && sortedPairs.length >= 2) concentrationRisk = 'medium';
+  else if (topPoolShare < 90) concentrationRisk = 'high';
+  else concentrationRisk = 'extreme';
+
+  const slippage1k = totalLiquidity > 0 ? Math.min((1000 / totalLiquidity) * 100 * 1.5, 50) : 50;
+  const slippage10k = totalLiquidity > 0 ? Math.min((10000 / totalLiquidity) * 100 * 1.5, 50) : 50;
+  const slippage50k = totalLiquidity > 0 ? Math.min((50000 / totalLiquidity) * 100 * 1.5, 50) : 50;
+
+  const liquidityToMcap = marketCap > 0 ? (totalLiquidity / marketCap) * 100 : 0;
+  const volumeToLiquidity = totalLiquidity > 0 ? (volume24h / totalLiquidity) * 100 : 0;
+
+  let healthScore = 50;
+  if (totalLiquidity >= 500000) healthScore += 20;
+  else if (totalLiquidity >= 100000) healthScore += 10;
+  else if (totalLiquidity < 20000) healthScore -= 15;
+  
+  if (liquidityToMcap >= 10) healthScore += 15;
+  else if (liquidityToMcap >= 5) healthScore += 8;
+  else if (liquidityToMcap < 2) healthScore -= 10;
+  
+  if (concentrationRisk === 'low') healthScore += 10;
+  else if (concentrationRisk === 'extreme') healthScore -= 15;
+  
+  if (sortedPairs.length >= 3) healthScore += 5;
+  
+  healthScore = Math.max(0, Math.min(100, healthScore));
+
+  const dexDistribution = sortedPairs.slice(0, 5).map(p => ({
+    name: p.dexId?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) ?? 'Unknown',
+    liquidity: p.liquidity?.usd ?? 0,
+    share: totalLiquidity > 0 ? ((p.liquidity?.usd ?? 0) / totalLiquidity) * 100 : 0,
+  }));
+
+  const warnings: string[] = [];
+  if (depth === 'critical') warnings.push('Critical liquidity - high slippage risk');
+  if (depth === 'shallow') warnings.push('Low liquidity - trade with caution');
+  if (concentrationRisk === 'extreme') warnings.push('Single pool concentration risk');
+  if (concentrationRisk === 'high') warnings.push('High pool concentration');
+  if (liquidityToMcap < 2) warnings.push('Low liquidity relative to market cap');
+  if (volumeToLiquidity > 200) warnings.push('Unusual volume/liquidity ratio');
+  if (sortedPairs.length === 1) warnings.push('Only one trading pool available');
+
+  let recommendation: 'safe' | 'moderate' | 'caution' | 'avoid';
+  if (healthScore >= 70 && depth !== 'critical' && concentrationRisk !== 'extreme') {
+    recommendation = 'safe';
+  } else if (healthScore >= 50 && depth !== 'critical') {
+    recommendation = 'moderate';
+  } else if (healthScore >= 30) {
+    recommendation = 'caution';
+  } else {
+    recommendation = 'avoid';
+  }
+
+  return {
+    tokenAddress: mainPair.baseToken?.address ?? tokenAddress,
+    symbol: mainPair.baseToken?.symbol ?? '???',
+    name: mainPair.baseToken?.name ?? 'Unknown',
+    imageUrl: mainPair.info?.imageUrl ?? null,
+    currentPrice,
+    liquidity: {
+      totalUsd: Math.round(totalLiquidity),
+      baseAmount: baseLiquidity,
+      quoteAmount: quoteLiquidity,
+      depth,
+    },
+    concentration: {
+      riskLevel: concentrationRisk,
+      topPoolShare: Math.round(topPoolShare * 10) / 10,
+      poolCount: sortedPairs.length,
+    },
+    slippage: {
+      estimated1k: Math.round(slippage1k * 100) / 100,
+      estimated10k: Math.round(slippage10k * 100) / 100,
+      estimated50k: Math.round(slippage50k * 100) / 100,
+    },
+    metrics: {
+      liquidityToMcap: Math.round(liquidityToMcap * 100) / 100,
+      volumeToLiquidity: Math.round(volumeToLiquidity * 100) / 100,
+      healthScore,
+    },
+    dexDistribution,
+    warnings,
+    recommendation,
+  };
+}
