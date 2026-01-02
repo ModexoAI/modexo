@@ -92,7 +92,7 @@ export function getTimeframeMs(key: keyof typeof ANALYSIS_TIMEFRAMES): number {
 
 export const AGENT_IDS = {
   FAAP_X402: "faap-x402",
-  X402_POLYMARKET: "x402-polymarket",
+  X402_MODEXOBET: "x402-ModexoBet",
   X402_SNIPER: "x402-sniper",
   X402_PORTFOLIO: "x402-portfolio",
 } as const;

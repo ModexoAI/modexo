@@ -32,8 +32,11 @@ import {
   PieChart,
   Target,
   TrendingDown,
-  Droplets
+  Droplets,
+  LogOut,
+  Search
 } from "lucide-react";
+import { usePhantom } from "@/hooks/use-phantom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -164,6 +167,15 @@ const agents: Agent[] = [
     status: 'online',
     category: 'AI Utility',
     capabilities: ['Pool Depth', 'Slippage Estimates', 'Concentration Risk', 'Health Score']
+  },
+  {
+    id: 'x402-whaletracker',
+    name: 'x402 Whale Tracker Agent',
+    description: 'Monitor large wallet movements and whale activity in real-time. Get alerts when whales buy or sell tokens you care about.',
+    icon: Search,
+    status: 'online',
+    category: 'AI Utility',
+    capabilities: ['Whale Alerts', 'Large TX Monitoring', 'Smart Money Tracking', 'Buy/Sell Signals']
   },
   {
     id: 'x402-portfolio',
@@ -2661,11 +2673,251 @@ function LiquidityTerminalOutput({ onClose }: { onClose: () => void }) {
   );
 }
 
+interface WhaleTrade {
+  wallet: string;
+  type: 'buy' | 'sell' | 'unknown';
+  amountUsd: number;
+  timestamp: string;
+  tokenSymbol?: string;
+}
+
+interface WhaleResult {
+  token: string;
+  recentWhaleTrades: WhaleTrade[];
+  summary: {
+    totalTrades: number;
+    buyVolume: number;
+    sellVolume: number;
+    netFlow: number;
+    netFlowLabel: string;
+  };
+  generatedAt: string;
+}
+
+function WhaleTrackerTerminalOutput({ onClose }: { onClose: () => void }) {
+  const [tokenAddress, setTokenAddress] = useState("");
+  const [isTracking, setIsTracking] = useState(false);
+  const [result, setResult] = useState<WhaleResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const trackWhales = async () => {
+    setIsTracking(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      const response = await fetch(`/api/whales?limit=20`);
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to track whales");
+      }
+
+      const data = await response.json();
+      
+      // Filter by token if specified
+      let filteredData = data;
+      if (tokenAddress.trim()) {
+        const searchTerm = tokenAddress.trim().toLowerCase();
+        filteredData = data.filter((trade: any) => 
+          trade.tokenAddress?.toLowerCase().includes(searchTerm) ||
+          trade.tokenSymbol?.toLowerCase().includes(searchTerm)
+        );
+      }
+      
+      let buyVolume = 0;
+      let sellVolume = 0;
+      for (const trade of filteredData) {
+        if (trade.type === 'buy') buyVolume += (trade.amountUsd || 0);
+        else sellVolume += (trade.amountUsd || 0);
+      }
+      const netFlow = buyVolume - sellVolume;
+      
+      setResult({
+        token: tokenAddress.trim() || "All Trending Tokens",
+        recentWhaleTrades: filteredData.map((t: any) => ({
+          wallet: t.wallet || t.txnSignature?.slice(0, 12) || "Unknown",
+          type: t.type || 'unknown',
+          amountUsd: t.amountUsd || 0,
+          timestamp: t.timestamp || new Date().toISOString(),
+          tokenSymbol: t.tokenSymbol || "???"
+        })),
+        summary: {
+          totalTrades: filteredData.length,
+          buyVolume,
+          sellVolume,
+          netFlow,
+          netFlowLabel: netFlow > 0 ? 'bullish' : netFlow < 0 ? 'bearish' : 'neutral'
+        },
+        generatedAt: new Date().toISOString()
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsTracking(false);
+    }
+  };
+
+  const formatUsd = (val: number) => {
+    if (val >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
+    if (val >= 1e3) return `$${(val / 1e3).toFixed(1)}K`;
+    return `$${val.toFixed(0)}`;
+  };
+
+  const getFlowColor = (label: string) => {
+    switch (label) {
+      case 'bullish': return 'text-emerald-400 bg-emerald-500/20 border-emerald-500/30';
+      case 'bearish': return 'text-red-400 bg-red-500/20 border-red-500/30';
+      default: return 'text-white/60 bg-white/10 border-white/20';
+    }
+  };
+
+  return (
+    <div className="bg-[#0a0a0a] border border-white/10 rounded-xl overflow-hidden" data-testid="whaletracker-terminal">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#0f0f0f]">
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-red-500/80" />
+            <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
+            <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <Terminal className="w-4 h-4 text-primary" />
+            <span className="text-white/70 font-mono">agent://x402-whaletracker</span>
+            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">
+              READY
+            </Badge>
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClose}
+          className="h-7 w-7 p-0 hover:bg-white/10"
+          data-testid="button-close-whaletracker"
+        >
+          <X className="w-4 h-4" />
+        </Button>
+      </div>
+
+      <ScrollArea className="h-[600px]">
+        <div className="p-6 space-y-6">
+          <div className="space-y-3">
+            <label className="text-sm text-white/70">Filter by token symbol or address (optional - leave empty for all trending):</label>
+            <div className="flex gap-2">
+              <Input
+                placeholder="e.g., SOL, BONK, or leave empty for all"
+                value={tokenAddress}
+                onChange={(e) => setTokenAddress(e.target.value)}
+                className="bg-white/5 border-white/10 text-white font-mono text-sm"
+                data-testid="input-whale-token"
+              />
+              <Button
+                onClick={trackWhales}
+                disabled={isTracking}
+                className="bg-primary hover:bg-primary/90 px-6"
+                data-testid="button-track-whales"
+              >
+                {isTracking ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  "Track Whales"
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {error && (
+            <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+              {error}
+            </div>
+          )}
+
+          {result && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 rounded-lg bg-white/5 border border-white/10">
+                <div>
+                  <div className="text-lg font-bold text-white font-mono">{result.token.slice(0, 8)}...{result.token.slice(-6)}</div>
+                  <div className="text-xs text-white/50">Whale Activity Report</div>
+                </div>
+                <div className="text-right">
+                  <Badge className={`text-sm px-3 py-1 ${getFlowColor(result.summary.netFlowLabel)}`}>
+                    {result.summary.netFlowLabel.toUpperCase()}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
+                  <div className="text-xs text-emerald-400/70 mb-1">Buy Volume</div>
+                  <div className="text-xl font-bold text-emerald-400">{formatUsd(result.summary.buyVolume)}</div>
+                </div>
+                <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-center">
+                  <div className="text-xs text-red-400/70 mb-1">Sell Volume</div>
+                  <div className="text-xl font-bold text-red-400">{formatUsd(result.summary.sellVolume)}</div>
+                </div>
+                <div className="p-4 rounded-lg bg-white/5 border border-white/10 text-center">
+                  <div className="text-xs text-white/50 mb-1">Net Flow</div>
+                  <div className={`text-xl font-bold ${result.summary.netFlow >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {result.summary.netFlow >= 0 ? '+' : ''}{formatUsd(result.summary.netFlow)}
+                  </div>
+                </div>
+              </div>
+
+              {result.recentWhaleTrades.length > 0 ? (
+                <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Activity className="w-4 h-4 text-primary" />
+                    <span className="text-sm text-white/70">Recent Whale Trades ({result.summary.totalTrades})</span>
+                  </div>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {result.recentWhaleTrades.map((trade, i) => (
+                      <div key={i} className="flex items-center justify-between p-2 rounded bg-white/5">
+                        <div className="flex items-center gap-2">
+                          <Badge className={trade.type === 'buy' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-red-500/20 text-red-400 border-red-500/30'}>
+                            {trade.type.toUpperCase()}
+                          </Badge>
+                          {trade.tokenSymbol && (
+                            <span className="text-xs font-bold text-primary">{trade.tokenSymbol}</span>
+                          )}
+                          <span className="text-xs font-mono text-white/60">
+                            {trade.wallet.slice(0, 4)}...{trade.wallet.slice(-4)}
+                          </span>
+                        </div>
+                        <span className="text-sm font-mono text-white">{formatUsd(trade.amountUsd)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 rounded-lg bg-white/5 border border-white/10 text-center text-white/50">
+                  No whale trades found for this token
+                </div>
+              )}
+
+              <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-xs text-yellow-400/80">
+                ⚠️ Whale tracking requires Helius API. Results show large transactions detected on-chain.
+              </div>
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+
+      <div className="px-4 py-3 border-t border-white/5 bg-[#080808]">
+        <div className="text-xs font-mono text-white/30">
+          Powered by MODEXO x402 Whale Tracker • Data via Helius
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const AGENT_CATEGORIES = ["AI Utility", "Marketing x402", "B2B x402", "Verification"] as const;
 
 export default function Dashboard() {
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>("AI Utility");
+  const { connected, connecting, publicKey, connect, disconnect, isPhantomInstalled } = usePhantom();
 
   const filteredAgents = agents.filter(agent => agent.category === activeCategory);
 
@@ -2677,11 +2929,42 @@ export default function Dashboard() {
             <img src={logo} alt="MODEXO" className="h-7 w-7 object-contain" />
             <span className="text-base font-heading font-bold text-white tracking-wider">MODEXO</span>
           </Link>
-          <div className="flex items-center gap-4">
-            <Badge className="bg-primary/20 text-primary border-primary/30 text-xs">
+          <div className="flex items-center gap-3">
+            <Badge className="bg-primary/20 text-primary border-primary/30 text-xs hidden sm:flex">
               <Bot className="w-3 h-3 mr-1" />
               Agent Terminal
             </Badge>
+            {connected ? (
+              <div className="flex items-center gap-2">
+                <Badge 
+                  className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs font-mono cursor-pointer"
+                  data-testid="wallet-address-badge"
+                >
+                  <Wallet className="w-3 h-3 mr-1" />
+                  {publicKey?.slice(0, 4)}...{publicKey?.slice(-4)}
+                </Badge>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={disconnect}
+                  className="h-7 w-7 p-0 text-white/50 hover:text-red-400 hover:bg-red-500/10"
+                  data-testid="button-disconnect-wallet"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                onClick={connect}
+                disabled={connecting}
+                size="sm"
+                className="h-8 bg-primary hover:bg-primary/90 text-white text-xs font-medium"
+                data-testid="button-connect-wallet"
+              >
+                <Wallet className="w-3.5 h-3.5 mr-1.5" />
+                {connecting ? 'Connecting...' : isPhantomInstalled ? 'Connect Wallet' : 'Get Phantom'}
+              </Button>
+            )}
           </div>
         </div>
       </nav>
@@ -2722,6 +3005,8 @@ export default function Dashboard() {
               <SmartEntryTerminalOutput onClose={() => setActiveAgent(null)} />
             ) : activeAgent === 'x402-liquidity' ? (
               <LiquidityTerminalOutput onClose={() => setActiveAgent(null)} />
+            ) : activeAgent === 'x402-whaletracker' ? (
+              <WhaleTrackerTerminalOutput onClose={() => setActiveAgent(null)} />
             ) : (
               <AgentTerminalOutput 
                 agentId={activeAgent} 

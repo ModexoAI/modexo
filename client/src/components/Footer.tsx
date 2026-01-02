@@ -1,4 +1,4 @@
-import { Twitter, Send, Github } from "lucide-react";
+import { Twitter, Send, Github, BookOpen } from "lucide-react";
 import { Link } from "wouter";
 
 export default function Footer() {
@@ -10,14 +10,18 @@ export default function Footer() {
             <h3 className="text-2xl font-bold font-heading text-white mb-2">MODEXO</h3>
           </div>
 
-          <div className="flex gap-6">
-            <a href="#" className="text-gray-400 hover:text-primary transition-colors">
+          <div className="flex gap-6 items-center">
+            <a href="https://modexo.gitbook.io/modexo-docs" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-primary transition-colors">
+              <BookOpen size={24} />
+            </a>
+            <a href="https://x.com/modex420o?s=21" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-primary transition-colors">
               <Twitter size={24} />
             </a>
-            <a href="#" className="text-gray-400 hover:text-primary transition-colors">
+            <div className="flex items-center gap-2 text-gray-400">
               <Send size={24} />
-            </a>
-            <a href="#" className="text-gray-400 hover:text-primary transition-colors">
+              <span className="text-xs">Coming in a week</span>
+            </div>
+            <a href="https://github.com/Modex402o/modexo" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-primary transition-colors">
               <Github size={24} />
             </a>
           </div>

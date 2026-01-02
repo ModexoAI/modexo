@@ -13,6 +13,7 @@ import {
 import { getRecentWhaleTrades, isHeliusConfigured, getWalletRecentSwaps } from "./services/helius";
 import { getTopTraderPositions, getCurrentMode, setMode, getPredictionEntries, type PredictionMode } from "./services/polymarket";
 import { insertTrackedWalletSchema, insertUserWatchlistSchema } from "@shared/schema";
+import { x402Middleware, create402Response, getAllAgentsInfo, getAgentByResource, MODEXO_AGENTS } from "./services/x402";
 
 const ROUTES_VERSION = "1.2.0";
 const MAX_REQUEST_SIZE = 1024 * 100;
@@ -932,6 +933,263 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching wallet transactions:", error);
       res.status(500).json({ error: "Failed to fetch transactions" });
+    }
+  });
+
+  // ==================== x402 PROTOCOL ENDPOINTS ====================
+
+  app.get("/api/x402/agents", async (req, res) => {
+    try {
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+      const baseUrl = `${protocol}://${req.get("host")}`;
+      const agents = MODEXO_AGENTS.map(agent => ({
+        ...agent,
+        fullUrl: `${baseUrl}${agent.resource}`,
+        priceDisplay: `$${agent.priceUSD.toFixed(2)} USDC`
+      }));
+      res.json({ agents, platform: "MODEXO", version: "1.0.0" });
+    } catch (error) {
+      console.error("Error listing x402 agents:", error);
+      res.status(500).json({ error: "Failed to list agents" });
+    }
+  });
+
+  app.get("/api/x402/portfolio", x402Middleware("x402-portfolio"), async (req, res) => {
+    try {
+      const wallet = sanitizeQueryParam(req.query.wallet);
+      
+      if (!wallet || !validateSolanaAddress(wallet)) {
+        return res.status(400).json({ error: "Valid Solana wallet address required" });
+      }
+
+      const trades = await getWalletRecentSwaps(wallet);
+      
+      const tokenMap = new Map<string, { symbol: string; amount: number; valueUsd: number }>();
+      
+      for (const trade of trades) {
+        const existing = tokenMap.get(trade.tokenAddress) || { 
+          symbol: trade.tokenSymbol, 
+          amount: 0, 
+          valueUsd: 0 
+        };
+        
+        if (trade.side === "buy") {
+          existing.amount += trade.sizeNative;
+          existing.valueUsd += trade.sizeUsd;
+        } else {
+          existing.amount -= trade.sizeNative;
+          existing.valueUsd -= trade.sizeUsd;
+        }
+        
+        tokenMap.set(trade.tokenAddress, existing);
+      }
+
+      const holdings = Array.from(tokenMap.entries())
+        .filter(([_, data]) => data.amount > 0)
+        .map(([address, data]) => ({
+          tokenAddress: address,
+          symbol: data.symbol,
+          amount: data.amount,
+          estimatedValueUsd: Math.max(0, data.valueUsd)
+        }));
+
+      const totalValueUSD = holdings.reduce((sum, h) => sum + h.estimatedValueUsd, 0);
+      
+      res.json({
+        wallet,
+        totalValueUSD,
+        tokenCount: holdings.length,
+        tokens: holdings,
+        analysis: `Portfolio contains ${holdings.length} tokens with estimated value of $${totalValueUSD.toFixed(2)}. Based on recent ${trades.length} transactions.`,
+        generatedAt: new Date().toISOString(),
+        poweredBy: "MODEXO x402"
+      });
+    } catch (error) {
+      console.error("x402 portfolio error:", error);
+      res.status(500).json({ error: "Failed to analyze portfolio" });
+    }
+  });
+
+  app.get("/api/x402/entry", x402Middleware("x402-entry"), async (req, res) => {
+    try {
+      const token = sanitizeQueryParam(req.query.token);
+      
+      if (!token) {
+        return res.status(400).json({ error: "Token address or symbol required" });
+      }
+
+      const analysis = await analyzeSmartEntry(token);
+      
+      if (!analysis) {
+        return res.status(404).json({ error: "Token not found or insufficient data" });
+      }
+
+      res.json({
+        token: analysis.symbol,
+        tokenAddress: analysis.tokenAddress,
+        currentPrice: analysis.currentPrice,
+        entryZones: analysis.entryZones,
+        signals: analysis.signals,
+        volumeAnalysis: analysis.volumeAnalysis,
+        recommendation: analysis.recommendation,
+        generatedAt: new Date().toISOString(),
+        poweredBy: "MODEXO x402"
+      });
+    } catch (error) {
+      console.error("x402 entry error:", error);
+      res.status(500).json({ error: "Failed to analyze entry points" });
+    }
+  });
+
+  app.get("/api/x402/liquidity", x402Middleware("x402-liquidity"), async (req, res) => {
+    try {
+      const token = sanitizeQueryParam(req.query.token);
+      
+      if (!token) {
+        return res.status(400).json({ error: "Token address or symbol required" });
+      }
+
+      const analysis = await analyzeLiquidity(token);
+      
+      if (!analysis) {
+        return res.status(404).json({ error: "Token not found or no liquidity data" });
+      }
+
+      res.json({
+        token: analysis.symbol,
+        tokenAddress: analysis.tokenAddress,
+        liquidityUSD: analysis.liquidity.totalUsd,
+        liquidity: analysis.liquidity,
+        concentration: analysis.concentration,
+        slippage: analysis.slippage,
+        dexDistribution: analysis.dexDistribution,
+        recommendation: analysis.recommendation,
+        generatedAt: new Date().toISOString(),
+        poweredBy: "MODEXO x402"
+      });
+    } catch (error) {
+      console.error("x402 liquidity error:", error);
+      res.status(500).json({ error: "Failed to analyze liquidity" });
+    }
+  });
+
+  app.get("/api/x402/whaletracker", x402Middleware("x402-whaletracker"), async (req, res) => {
+    try {
+      const token = sanitizeQueryParam(req.query.token);
+      
+      if (!token) {
+        return res.status(400).json({ error: "Token address required" });
+      }
+
+      const whaleTrades = await getRecentWhaleTrades([token]);
+      
+      let buyVolume = 0;
+      let sellVolume = 0;
+      
+      for (const trade of whaleTrades) {
+        if (trade.side === 'buy') {
+          buyVolume += trade.sizeUsd;
+        } else {
+          sellVolume += trade.sizeUsd;
+        }
+      }
+      
+      const netFlow = buyVolume - sellVolume;
+      const netFlowLabel = netFlow > 0 ? 'bullish' : netFlow < 0 ? 'bearish' : 'neutral';
+
+      res.json({
+        token,
+        recentWhaleTrades: whaleTrades.slice(0, 10).map(t => ({
+          wallet: t.walletAddress,
+          type: t.side,
+          amountUsd: t.sizeUsd,
+          timestamp: new Date(t.blockTime * 1000).toISOString(),
+          tokenSymbol: t.tokenSymbol
+        })),
+        summary: {
+          totalTrades: whaleTrades.length,
+          buyVolume,
+          sellVolume,
+          netFlow,
+          netFlowLabel
+        },
+        generatedAt: new Date().toISOString(),
+        poweredBy: "MODEXO x402"
+      });
+    } catch (error) {
+      console.error("x402 whaletracker error:", error);
+      res.status(500).json({ error: "Failed to track whale activity" });
+    }
+  });
+
+  app.get("/api/x402/kyc", x402Middleware("x402-kyc"), async (req, res) => {
+    try {
+      const wallet = sanitizeQueryParam(req.query.wallet);
+      
+      if (!wallet) {
+        return res.status(400).json({ error: "Wallet address required" });
+      }
+
+      if (!validateSolanaAddress(wallet)) {
+        return res.status(400).json({ error: "Invalid Solana wallet address" });
+      }
+
+      const swaps = await getWalletRecentSwaps(wallet);
+      
+      const flags: string[] = [];
+      let riskScore = 0;
+      
+      const totalVolume = swaps.reduce((sum, s) => sum + (s.sizeUsd || 0), 0);
+      const uniqueTokens = new Set(swaps.map(s => s.tokenAddress)).size;
+      const avgTxSize = swaps.length > 0 ? totalVolume / swaps.length : 0;
+      
+      if (swaps.length < 5) {
+        flags.push("Low activity - new or inactive wallet");
+        riskScore += 15;
+      }
+      
+      if (avgTxSize > 50000) {
+        flags.push("High-value transactions detected");
+        riskScore += 10;
+      }
+      
+      if (uniqueTokens > 20) {
+        flags.push("Diverse token portfolio - possible trader");
+      }
+      
+      if (swaps.length > 100) {
+        flags.push("High frequency trading pattern");
+        riskScore += 5;
+      }
+      
+      const trustScore = Math.max(0, Math.min(100, 100 - riskScore));
+      
+      let riskLevel: string;
+      if (trustScore >= 80) riskLevel = "low";
+      else if (trustScore >= 60) riskLevel = "medium";
+      else if (trustScore >= 40) riskLevel = "elevated";
+      else riskLevel = "high";
+
+      res.json({
+        address: wallet,
+        trustScore,
+        riskLevel,
+        flags,
+        analysis: {
+          totalTransactions: swaps.length,
+          totalVolumeUsd: totalVolume,
+          uniqueTokensTraded: uniqueTokens,
+          avgTransactionSize: avgTxSize,
+          firstSeen: swaps.length > 0 ? new Date(swaps[swaps.length - 1]?.blockTime * 1000).toISOString() : null,
+          lastSeen: swaps.length > 0 ? new Date(swaps[0]?.blockTime * 1000).toISOString() : null
+        },
+        generatedAt: new Date().toISOString(),
+        poweredBy: "MODEXO x402",
+        disclaimer: "This is AI-generated analysis for informational purposes only. Not a substitute for professional KYC/AML compliance."
+      });
+    } catch (error) {
+      console.error("x402 kyc error:", error);
+      res.status(500).json({ error: "Failed to verify wallet" });
     }
   });
 

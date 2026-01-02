@@ -41,9 +41,11 @@ export default function Hero() {
           viewport={{ once: true }}
           className="flex items-center justify-center"
         >
-          <Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/10 font-medium px-8 h-12 text-base">
-            Read the Documentation
-          </Button>
+          <a href="https://modexo.gitbook.io/modexo-docs" target="_blank" rel="noopener noreferrer">
+            <Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/10 font-medium px-8 h-12 text-base">
+              Read the Documentation
+            </Button>
+          </a>
         </motion.div>
       </div>
     </section>

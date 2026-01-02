@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Zap, Activity, Radio, Wallet } from "lucide-react";
+import { Zap, Activity, Radio, Wallet, Target, Droplets } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
@@ -22,12 +22,20 @@ const agents = [
     capabilities: ['Outcome Simulation', 'Win Rate Analysis', 'Probability Engine', 'Smart Predictions']
   },
   {
-    id: 'x402-sniper',
-    name: "x402 Sniper Agent",
-    description: "Autonomous agent that snipes new token launches with configurable parameters and safety checks. Get in early on promising launches automatically.",
-    icon: Radio,
-    status: 'coming_soon',
-    capabilities: ['Auto-Buy', 'Slippage Control', 'Gas Optimization']
+    id: 'x402-entry',
+    name: "x402 Smart Entry Agent",
+    description: "AI-powered entry point advisor that analyzes price action, volume patterns, and market momentum to identify optimal buy zones for any Solana token.",
+    icon: Target,
+    status: 'online',
+    capabilities: ['Entry Zones', 'Volume Analysis', 'Support Levels', 'Momentum Score']
+  },
+  {
+    id: 'x402-liquidity',
+    name: "x402 Liquidity Scanner",
+    description: "Deep liquidity analysis that evaluates pool depth, concentration risk, slippage estimates, and DEX distribution to help you trade safely.",
+    icon: Droplets,
+    status: 'online',
+    capabilities: ['Pool Depth', 'Slippage Estimates', 'Concentration Risk', 'Health Score']
   },
   {
     id: 'x402-portfolio',
